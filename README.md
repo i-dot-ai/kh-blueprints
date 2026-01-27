@@ -30,20 +30,34 @@ This will initiate the process of pulling the necessary images and starting the 
 $ cp applications/mcp_datastore/docker-compose.yaml .
 $ docker compose up -d
 $ ls data/*/*
-ls data/*/*
-data/qdrant/config:
+data/vector_db/config:
 config.yaml
 
-data/qdrant/plugins:
-setup_collections.py
+data/vector_db/plugins:
+example_plugin.py
 
-data/qdrant/storage:
-aliases         collections     raft_state.json
+data/data_ingestor/config:
+config.yaml
+
+data/data_ingestor/parsers:
+base.py         html_parser.py  __init__.py
+
+data/data_ingestor/embedders:
+base.py         qdrant_embedder.py  __init__.py
 ```
 
-`config.yaml` contains the configuration for the Qdrant vector database, while `setup_collections.py` is a script that can be modified to define custom collections and indexes on set up of the container.
+Each component mounts a single `custom` directory where defaults are copied on first run. Users can modify these files to customize behaviour:
+- **vector_db**: `config/` for Qdrant settings, `plugins/` for startup scripts
+- **data_ingestor**: `config/` for settings, `parsers/` and `embedders/` for custom code
 
 ### Components
+
+The following components are available:
+
+| Component | Description | Documentation |
+|-----------|-------------|---------------|
+| [vector_db](components/vector_db/) | Qdrant vector database with plugin support | [README](components/vector_db/README.md) |
+| [data_ingestor](components/data_ingestor/) | Content ingestion and embedding | [README](components/data_ingestor/README.md) |
 
 Individual components can be used by creating a custom `docker-compose.yaml` file that references the desired component images. Below is an example of how to define a service using a component:
 
@@ -77,12 +91,14 @@ If you wish to add or develop entirely new components or applications, or build 
 │       ├── Dockerfile          # Component build definition
 │       └── entrypoint.sh       # Container startup script
 ├── tests/                      # Test infrastructure
-│   ├── applications/            # Application-specific tests
+│   ├── applications/           # Application integration tests
 │   │   └── test_<application-a>.py
-│   ├── components/             # Component-specific unit tests
+│   ├── components/             # Component container tests (require Docker)
+│   │   └── test_<component-a>.py
+│   ├── unit/                   # Unit tests (no Docker needed)
 │   │   └── test_<component-a>.py
 │   ├── test_utils.py           # Shared testing utilities
-│   └── pytest.ini              # Pytest configuration
+│   └── conftest.py             # Pytest fixtures
 ├── .github/workflows/          # CI/CD pipeline definitions
 ├── docker-compose.yaml         # Local dev environment setup
 └── LICENSE
@@ -131,6 +147,9 @@ The `components/` directory contains modular services that can be independently 
 #### Run tests locally
 
 ```bash
+# Run unit tests (no Docker needed)
+./run_tests.sh unit
+
 # Run component tests (starts service automatically)
 ./run_tests.sh component vector_db
 
@@ -140,37 +159,28 @@ The `components/` directory contains modular services that can be independently 
 
 #### Adding new tests
 
-Tests for components and applications are written using `pytest`. To add new tests:
-1. Add component tests under `tests/components/` named `test_<component_name>.py`
-2. Add application tests under `tests/applications/` named `test_<application_name>.
+Tests are written using `pytest`. To add new tests:
+1. Add unit tests under `tests/unit/` named `test_<component_name>.py`
+2. Add component tests under `tests/components/` named `test_<component_name>.py`
+3. Add application tests under `tests/applications/` named `test_<application_name>.py`
 
 ### CI/CD Pipelines
 
 
-The CI system runs two pipelines:
+The CI system runs three pipelines, each publishing test results directly on PRs:
 
-1. **Component Build & Test**:
-   - Workflow defined in `.github/workflows/component_build_test.yaml`
+1. **Unit Tests** (`.github/workflows/unit-tests.yml`):
+   - Triggered on push to main and PRs
+   - Runs all unit tests (no Docker needed)
+
+2. **Component Build & Test** (`.github/workflows/component-build-test.yml`):
+   - Triggered on push to main and PRs
    - Builds Docker images for all components
-   - Verifies containers can start and stay running
+   - Runs component container tests
 
-2. **Application Test**:
-    - Workflow defined in `.github/workflows/application_test.yaml`
-   - Tests full application stacks using pre-built components
-   - Runs health checks and integration tests
-
-
-#### Component Build & Test
-1. Triggered on push to main and PRs
-2. Builds all component images
-3. Verifies containers can start and stay running
-
-#### Application Test
-1. Runs after successful component builds
-2. Tests each application stack:
-   - Brings up services with built components
-   - Runs application-specific tests
-   - Captures service logs
+3. **Application Test** (`.github/workflows/application-test.yml`):
+   - Runs after successful component builds
+   - Tests full application stacks using built components
 
 ## Contributing
 
