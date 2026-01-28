@@ -74,6 +74,7 @@ Test utilities in `tests/test_utils.py` provide:
 
 ### Current Components
 - `vector_db` - Qdrant vector database wrapper (ports 6333 HTTP, 6334 gRPC)
+- `data_ingestor` - Content ingestion and vector embedding service
 
 ### Current Applications
 - `mcp_datastore` - Vector database application using the vector_db component
