@@ -9,7 +9,6 @@ to store the resulting documents in vector databases.
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -96,7 +95,7 @@ class DataIngestor:
             logger.warning("No documents were successfully parsed")
             return 0
 
-        logger.info(f"Embedding {len(documents)} document(s) into {store_type}/{collection}")
+        logger.info(f"Storing {len(documents)} document(s) into {store_type}/{collection}")
         embedder = self.get_embedder(store_type)
         stored = embedder.store(documents, collection)
         logger.info(f"Successfully stored {stored} document(s)")

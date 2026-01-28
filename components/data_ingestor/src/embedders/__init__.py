@@ -1,81 +1,62 @@
 """
-Embedder package for vector storage.
+Embedders package - pluggable vector store backends.
 
-Provides auto-discovery of embedder classes and a registry for lookup by store type.
+Embedders are auto-discovered from this package. Any class inheriting
+from BaseEmbedder is automatically registered by its store_type property.
 """
 
 import importlib
+import logging
 import pkgutil
 from pathlib import Path
 
 from .base import BaseEmbedder
 
-# Registry mapping store_type -> embedder class
+logger = logging.getLogger(__name__)
+
+# Registry of store_type -> embedder class
 _EMBEDDER_REGISTRY: dict[str, type[BaseEmbedder]] = {}
 
 
 def _discover_embedders() -> None:
-    """
-    Automatically discover all embedder classes in this package.
-
-    Scans all modules for classes that inherit from BaseEmbedder
-    and registers them by their store_type property.
-    """
+    """Auto-discover embedder classes in this package."""
     package_dir = Path(__file__).parent
 
     for module_info in pkgutil.iter_modules([str(package_dir)]):
         if module_info.name == "base":
             continue
-
-        module = importlib.import_module(f".{module_info.name}", package=__name__)
-
-        for attr_name in dir(module):
-            attr = getattr(module, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, BaseEmbedder)
-                and attr is not BaseEmbedder
-            ):
-                try:
-                    instance = attr()
-                    _EMBEDDER_REGISTRY[instance.store_type] = attr
-                except TypeError:
-                    # Skip if can't instantiate with no args
-                    pass
+        try:
+            module = importlib.import_module(f".{module_info.name}", package=__name__)
+            for attr_name in dir(module):
+                attr = getattr(module, attr_name)
+                if (isinstance(attr, type)
+                        and issubclass(attr, BaseEmbedder)
+                        and attr is not BaseEmbedder):
+                    instance = attr.__new__(attr)
+                    store_type = attr.store_type.fget(instance)
+                    _EMBEDDER_REGISTRY[store_type] = attr
+                    logger.debug(f"Registered embedder: {store_type} -> {attr.__name__}")
+        except Exception as e:
+            logger.warning(f"Failed to load embedder module '{module_info.name}': {e}")
 
 
 def get_embedder_class(store_type: str) -> type[BaseEmbedder]:
-    """
-    Get embedder class for a given store type.
-
-    Args:
-        store_type: Embedder type identifier (e.g., 'qdrant', 'pinecone')
-
-    Returns:
-        Embedder class
-
-    Raises:
-        ValueError: If store type is not supported
-    """
+    """Get an embedder class by store type."""
+    if not _EMBEDDER_REGISTRY:
+        _discover_embedders()
     if store_type not in _EMBEDDER_REGISTRY:
         raise ValueError(
-            f"Unsupported store type: {store_type}. "
-            f"Available types: {list(_EMBEDDER_REGISTRY.keys())}"
+            f"Unknown store type: {store_type}. "
+            f"Available: {list(_EMBEDDER_REGISTRY.keys())}"
         )
     return _EMBEDDER_REGISTRY[store_type]
 
 
 def supported_stores() -> list[str]:
     """Return list of supported store types."""
+    if not _EMBEDDER_REGISTRY:
+        _discover_embedders()
     return list(_EMBEDDER_REGISTRY.keys())
 
 
-# Run discovery on import
 _discover_embedders()
-
-
-__all__ = [
-    "BaseEmbedder",
-    "get_embedder_class",
-    "supported_stores",
-]

@@ -15,8 +15,7 @@ RUN pip install --no-cache-dir \
     beautifulsoup4 \
     pyyaml \
     lxml \
-    qdrant-client \
-    sentence-transformers
+    "qdrant-client[fastembed]"
 
 # Copy entrypoint
 COPY entrypoint.sh /app/entrypoint.sh
