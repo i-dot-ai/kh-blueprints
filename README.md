@@ -30,20 +30,34 @@ This will initiate the process of pulling the necessary images and starting the 
 $ cp applications/mcp_datastore/docker-compose.yaml .
 $ docker compose up -d
 $ ls data/*/*
-ls data/*/*
-data/qdrant/config:
+data/vector_db/config:
 config.yaml
 
-data/qdrant/plugins:
+data/vector_db/plugins:
 setup_collections.py
 
-data/qdrant/storage:
-aliases         collections     raft_state.json
+data/data_ingestor/config:
+config.yaml
+
+data/data_ingestor/parsers:
+base.py         html_parser.py  __init__.py
+
+data/data_ingestor/embedders:
+base.py         qdrant_embedder.py  __init__.py
 ```
 
-`config.yaml` contains the configuration for the Qdrant vector database, while `setup_collections.py` is a script that can be modified to define custom collections and indexes on set up of the container.
+Each component mounts a single `custom` directory where defaults are copied on first run. Users can modify these files to customize behaviour:
+- **vector_db**: `config/` for Qdrant settings, `plugins/` for startup scripts
+- **data_ingestor**: `config/` for settings, `parsers/` and `embedders/` for custom code
 
 ### Components
+
+The following components are available:
+
+| Component | Description | Documentation |
+|-----------|-------------|---------------|
+| [vector_db](components/vector_db/) | Qdrant vector database with plugin support | [README](components/vector_db/README.md) |
+| [data_ingestor](components/data_ingestor/) | Content ingestion and embedding | [README](components/data_ingestor/README.md) |
 
 Individual components can be used by creating a custom `docker-compose.yaml` file that references the desired component images. Below is an example of how to define a service using a component:
 
