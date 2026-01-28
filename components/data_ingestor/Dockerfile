@@ -31,8 +31,4 @@ RUN mkdir -p /app/config /app/parsers /app/embedders /app/output
 # Set PYTHONPATH to use runtime directories
 ENV PYTHONPATH="/app"
 
-# Health check - verify the process is running
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD pgrep -f "python.*ingestor" || exit 1
-
 ENTRYPOINT ["/app/entrypoint.sh"]

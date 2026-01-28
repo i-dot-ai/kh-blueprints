@@ -1,12 +1,11 @@
 """
-Data Ingestor - Ingests content, converts to JSON, and embeds into vector databases.
+Data Ingestor - Ingests content and embeds into vector databases.
 
 This module provides a generic ingestion framework that uses pluggable parsers
 to handle different content types (HTML, PDF, Markdown, etc.) and embedders
 to store the resulting documents in vector databases.
 """
 
-import json
 import logging
 import time
 from pathlib import Path
@@ -47,118 +46,60 @@ class DataIngestor:
         return {}
 
     def get_parser(self, source_type: str) -> BaseParser:
-        """
-        Get or create a parser for the given source type.
-
-        Args:
-            source_type: Parser type identifier (e.g., 'html', 'pdf')
-
-        Returns:
-            Configured parser instance
-
-        Raises:
-            ValueError: If source type is not supported
-        """
+        """Get or create a parser for the given source type."""
         if source_type not in self._parsers:
             parser_class = get_parser_class(source_type)
             parser_config = self.config.get(source_type, {})
             self._parsers[source_type] = parser_class(**parser_config)
-
         return self._parsers[source_type]
 
     def get_embedder(self, store_type: str) -> BaseEmbedder:
-        """
-        Get or create an embedder for the given store type.
-
-        Args:
-            store_type: Embedder type identifier (e.g., 'qdrant')
-
-        Returns:
-            Configured embedder instance
-
-        Raises:
-            ValueError: If store type is not supported
-        """
+        """Get or create an embedder for the given store type."""
         if store_type not in self._embedders:
             embedder_class = get_embedder_class(store_type)
             embedder_config = self.config.get(store_type, {})
             self._embedders[store_type] = embedder_class(**embedder_config)
-
         return self._embedders[store_type]
 
     def ingest(
         self,
-        source: str,
-        source_type: str = "html",
-        content: Optional[str] = None
-    ) -> Optional[ParsedDocument]:
-        """
-        Ingest content from a source.
-
-        Args:
-            source: Source identifier (URL, file path, etc.)
-            source_type: Type of parser to use
-            content: Optional pre-fetched content
-
-        Returns:
-            ParsedDocument or None on failure
-        """
-        parser = self.get_parser(source_type)
-        return parser.ingest(source, content)
-
-    def ingest_batch(
-        self,
-        sources: list[str],
-        source_type: str = "html"
-    ) -> list[ParsedDocument]:
-        """
-        Ingest multiple sources.
-
-        Args:
-            sources: List of source identifiers
-            source_type: Type of parser to use for all sources
-
-        Returns:
-            List of ParsedDocuments
-        """
-        results = []
-        delay = self.config.get("request_delay", 1.0)
-
-        for source in sources:
-            result = self.ingest(source, source_type)
-            if result:
-                results.append(result)
-            time.sleep(delay)
-
-        return results
-
-    def ingest_and_embed(
-        self,
         sources: list[str],
         source_type: str = "html",
         store_type: str = "qdrant",
-        collection_name: str = "documents"
+        collection: str = "documents"
     ) -> int:
         """
         Ingest sources and embed them into a vector database.
 
         Args:
-            sources: List of source identifiers
+            sources: List of source identifiers (URLs, file paths, etc.)
             source_type: Type of parser to use
             store_type: Type of vector store to use
-            collection_name: Name of the collection to store in
+            collection: Name of the collection to store in
 
         Returns:
             Number of documents successfully stored
         """
-        documents = self.ingest_batch(sources, source_type)
+        parser = self.get_parser(source_type)
+        delay = self.config.get("request_delay", 1.0)
+
+        documents = []
+        for source in sources:
+            logger.info(f"Parsing: {source}")
+            doc = parser.ingest(source)
+            if doc:
+                documents.append(doc)
+            if len(sources) > 1:
+                time.sleep(delay)
+
         if not documents:
-            logger.warning("No documents were successfully ingested")
+            logger.warning("No documents were successfully parsed")
             return 0
 
+        logger.info(f"Embedding {len(documents)} document(s) into {store_type}/{collection}")
         embedder = self.get_embedder(store_type)
-        stored = embedder.store(documents, collection_name)
-        logger.info(f"Successfully embedded and stored {stored} documents")
+        stored = embedder.store(documents, collection)
+        logger.info(f"Successfully stored {stored} document(s)")
         return stored
 
     @staticmethod
@@ -176,60 +117,43 @@ def main():
     """Main entry point for the data ingestor."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Data ingestor for embedding pipelines")
-    parser.add_argument("--source", help="Single source to ingest (URL, file path, etc.)")
-    parser.add_argument("--sources-file", help="File containing sources (one per line)")
-    parser.add_argument("--type", "-t", default="html",
-                        help=f"Source type (default: html, available: {DataIngestor.supported_types()})")
-    parser.add_argument("--output", "-o", help="Output JSON file path (if not embedding)")
+    parser = argparse.ArgumentParser(
+        description="Ingest content and embed into vector database",
+        usage="%(prog)s [options] <source> [source ...]"
+    )
+    parser.add_argument("sources", nargs="*", help="Sources to ingest (URLs, file paths, etc.)")
+    parser.add_argument("-f", "--file", help="File containing sources (one per line)")
+    parser.add_argument("-t", "--type", default="html",
+                        help="Source type (default: html)")
+    parser.add_argument("-s", "--store", default="qdrant",
+                        help="Vector store type (default: qdrant)")
+    parser.add_argument("-c", "--collection", default="documents",
+                        help="Collection name (default: documents)")
     parser.add_argument("--config", default="/app/config/config.yaml",
                         help="Config file path")
-
-    # Embedding options
-    parser.add_argument("--embed", action="store_true",
-                        help="Embed documents into vector database")
-    parser.add_argument("--store", "-s", default="qdrant",
-                        help=f"Vector store type (default: qdrant, available: {DataIngestor.supported_stores()})")
-    parser.add_argument("--collection", "-c", default="documents",
-                        help="Collection name for vector store (default: documents)")
 
     args = parser.parse_args()
 
     ingestor = DataIngestor(config_path=args.config)
 
-    sources = []
-    if args.source:
-        sources.append(args.source)
-    if args.sources_file:
-        with open(args.sources_file) as f:
+    # Collect sources from args and file
+    sources = list(args.sources)
+    if args.file:
+        with open(args.file) as f:
             sources.extend(line.strip() for line in f if line.strip())
 
     if not sources:
-        logger.info("No sources provided. Running in standby mode.")
-        while True:
-            time.sleep(60)
+        parser.print_help()
+        return
 
-    logger.info(f"Ingesting {len(sources)} source(s) as {args.type}...")
+    stored = ingestor.ingest(
+        sources,
+        source_type=args.type,
+        store_type=args.store,
+        collection=args.collection
+    )
 
-    if args.embed:
-        # Ingest and embed into vector database
-        stored = ingestor.ingest_and_embed(
-            sources,
-            source_type=args.type,
-            store_type=args.store,
-            collection_name=args.collection
-        )
-        logger.info(f"Embedded {stored} documents into {args.store}/{args.collection}")
-    else:
-        # Ingest and output to JSON file
-        documents = ingestor.ingest_batch(sources, source_type=args.type)
-        output_path = Path(args.output or "/app/output/documents.json")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(output_path, "w") as f:
-            json.dump([doc.to_dict() for doc in documents], f, indent=2)
-
-        logger.info(f"Wrote {len(documents)} documents to {output_path}")
+    logger.info(f"Done. Ingested {stored} document(s).")
 
 
 if __name__ == "__main__":
