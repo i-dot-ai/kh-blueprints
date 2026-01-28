@@ -36,7 +36,7 @@ for dir in "${SUBDIRS[@]}"; do
     mkdir -p "$CUSTOM_DIR/$dir"
 
     if [ -d "/app/defaults/$dir" ]; then
-        for file in /app/defaults/$dir/*; do
+        for file in /app/defaults/$dir/*.py /app/defaults/$dir/*.yaml; do
             [ -e "$file" ] || continue
             base_file=$(basename "$file")
             dest_file="$CUSTOM_DIR/$dir/$base_file"

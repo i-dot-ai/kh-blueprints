@@ -11,6 +11,7 @@ def main():
     qdrant_host = os.getenv("QDRANT_HOST", "localhost")
     qdrant_port = int(os.getenv("QDRANT_PORT", 6333))
     collection_name = os.getenv("COLLECTION_NAME", "documents")
+    vector_size = int(os.getenv("VECTOR_SIZE", 384))
 
     # Initialize client
     client = QdrantClient(host=qdrant_host, port=qdrant_port)
@@ -27,7 +28,7 @@ def main():
             client.create_collection(
                 collection_name=collection_name,
                 vectors_config=models.VectorParams(
-                    size=768,  # Default vector size for common embeddings
+                    size=vector_size,
                     distance=models.Distance.COSINE
                 )
             )
