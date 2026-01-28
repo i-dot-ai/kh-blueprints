@@ -23,7 +23,7 @@ services:
     depends_on:
       - vector_db
     environment:
-      - QDRANT_HOST=vector_db
+      - VECTOR_DB_HOST=vector_db
     # Example: ingest URLs by passing them as command arguments
     # command: ["https://example.com", "https://example.com/page2"]
     # Or use a file: command: ["-f", "/app/sources.txt"]
