@@ -24,22 +24,24 @@ A containerized service for ingesting content from various sources and embedding
 
 ## Usage
 
+The data ingestor is designed to run alongside a vector database via docker compose. Use `docker compose run` to execute it within the compose network so it can reach the vector_db service by name.
+
 ```bash
 # Ingest a single URL
-docker run -e QDRANT_HOST=host.docker.internal data_ingestor https://example.com
+docker compose run data_ingestor https://example.com
 
 # Ingest multiple URLs
-docker run -e QDRANT_HOST=host.docker.internal data_ingestor \
+docker compose run data_ingestor \
   https://example.com \
   https://example.com/page2
 
 # Ingest from a file
-docker run -e QDRANT_HOST=host.docker.internal \
+docker compose run \
   -v $(pwd)/urls.txt:/app/urls.txt \
   data_ingestor -f /app/urls.txt
 
 # Specify collection name
-docker run -e QDRANT_HOST=host.docker.internal data_ingestor \
+docker compose run data_ingestor \
   -c my_collection \
   https://example.com
 ```
@@ -58,10 +60,9 @@ services:
     depends_on:
       - vector_db
     environment:
-      - QDRANT_HOST=vector_db
+      - VECTOR_DB_HOST=vector_db
     volumes:
       - ./data/data_ingestor:/app/custom
-    command: ["https://example.com", "-c", "documents"]
 ```
 
 ## CLI Options
@@ -118,8 +119,8 @@ Connection settings that vary between environments:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `QDRANT_HOST` | Qdrant server hostname | `localhost` |
-| `QDRANT_PORT` | Qdrant server port | `6333` |
+| `VECTOR_DB_HOST` | Qdrant server hostname | `localhost` |
+| `VECTOR_DB_PORT` | Qdrant server port | `6333` |
 
 ## Adding New Parsers
 
