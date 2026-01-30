@@ -8,6 +8,7 @@ to store the resulting documents in vector databases.
 
 import logging
 import time
+from collections import deque
 from pathlib import Path
 
 import yaml
@@ -101,6 +102,80 @@ class DataIngestor:
         logger.info(f"Successfully stored {stored} document(s)")
         return stored
 
+    def crawl(
+        self,
+        seeds: list[str],
+        max_depth: int = 3,
+        source_type: str = "html",
+        store_type: str = "qdrant",
+        collection: str = "documents"
+    ) -> int:
+        """
+        Recursively ingest pages starting from seed URLs.
+
+        Discovers links on each page and follows those under the same
+        path prefix as the seed URL, up to max_depth levels deep.
+
+        Args:
+            seeds: Seed URLs to start crawling from
+            max_depth: Maximum crawl depth (0 = seed pages only)
+            source_type: Type of parser to use
+            store_type: Type of vector store to use
+            collection: Name of the collection to store in
+
+        Returns:
+            Number of documents successfully stored
+        """
+        from parsers.html_parser import HTMLParser
+
+        parser = self.get_parser(source_type)
+        embedder = self.get_embedder(store_type)
+        delay = self.config.get("request_delay", 1.0)
+
+        # Compute path prefix for each seed URL.
+        # If the seed ends with '/', use it directly as the prefix
+        # (e.g. https://example.com/docs/ → https://example.com/docs/).
+        # Otherwise use the parent path
+        # (e.g. https://example.com/docs/intro → https://example.com/docs/).
+        seed_prefixes = []
+        for seed in seeds:
+            if seed.endswith("/"):
+                seed_prefixes.append(seed)
+            else:
+                idx = seed.rfind("/")
+                seed_prefixes.append(seed[:idx + 1] if idx >= 0 else seed)
+
+        queue = deque((url, 0, prefix) for url, prefix in zip(seeds, seed_prefixes))
+        visited = set()
+        stored_total = 0
+
+        while queue:
+            url, depth, prefix = queue.popleft()
+            if url in visited:
+                continue
+            visited.add(url)
+
+            logger.info(f"Crawling (depth {depth}): {url}")
+            html = parser.fetch(url)
+            if html is None:
+                continue
+
+            doc = parser.parse(html, url)
+            count = embedder.store([doc], collection)
+            stored_total += count
+
+            if depth < max_depth and isinstance(parser, HTMLParser):
+                links = HTMLParser.extract_links(html, url)
+                for link in links:
+                    if link not in visited and link.startswith(prefix):
+                        queue.append((link, depth + 1, prefix))
+
+            if len(visited) > 1:
+                time.sleep(delay)
+
+        logger.info(f"Crawl complete. Stored {stored_total} document(s).")
+        return stored_total
+
     @staticmethod
     def supported_types() -> list[str]:
         """Return list of supported source types."""
@@ -130,6 +205,10 @@ def main():
                         help="Collection name (default: documents)")
     parser.add_argument("--config", default="/app/custom/config/config.yaml",
                         help="Config file path")
+    parser.add_argument("-r", "--recursive", action="store_true",
+                        help="Recursively crawl pages under each source URL")
+    parser.add_argument("--depth", type=int, default=3,
+                        help="Max crawl depth when using --recursive (default: 3)")
 
     args = parser.parse_args()
 
@@ -145,12 +224,21 @@ def main():
         parser.print_help()
         return
 
-    stored = ingestor.ingest(
-        sources,
-        source_type=args.type,
-        store_type=args.store,
-        collection=args.collection
-    )
+    if args.recursive:
+        stored = ingestor.crawl(
+            sources,
+            max_depth=args.depth,
+            source_type=args.type,
+            store_type=args.store,
+            collection=args.collection
+        )
+    else:
+        stored = ingestor.ingest(
+            sources,
+            source_type=args.type,
+            store_type=args.store,
+            collection=args.collection
+        )
 
     logger.info(f"Done. Ingested {stored} document(s).")
 

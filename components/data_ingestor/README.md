@@ -8,6 +8,7 @@ A containerized service for ingesting content from various sources and embedding
 - Pluggable embedder architecture - support for multiple vector databases
 - Auto-discovery of parser and embedder classes
 - Simple CLI - just pass URLs as arguments
+- Recursive crawl mode - ingest entire sections of a site with `-r`
 - Configurable via YAML and environment variables
 
 ## Supported Source Types
@@ -44,6 +45,14 @@ docker compose run \
 docker compose run data_ingestor \
   -c my_collection \
   https://example.com
+
+# Recursively ingest all pages under a URL path
+docker compose run data_ingestor \
+  -r https://example.com/docs/
+
+# Recursive with custom depth (default: 3)
+docker compose run data_ingestor \
+  -r --depth 2 https://example.com/docs/
 ```
 
 ### Docker Compose
@@ -78,8 +87,16 @@ options:
   -t, --type TYPE       Source type (default: html)
   -s, --store STORE     Vector store type (default: qdrant)
   -c, --collection NAME Collection name (default: documents)
+  -r, --recursive       Recursively crawl pages under each source URL
+  --depth N             Max crawl depth when using --recursive (default: 3)
   --config PATH         Config file path
 ```
+
+### Recursive Mode
+
+When `-r` is used, the ingestor crawls each seed URL and follows links that share the same path prefix. For example, given `https://example.com/docs/`, only links under `/docs/` are followed. Pages outside that prefix and external domains are ignored.
+
+The `--depth` flag controls how many levels deep to crawl from each seed page. A depth of 0 ingests only the seed pages themselves.
 
 ## Volume Mounts
 

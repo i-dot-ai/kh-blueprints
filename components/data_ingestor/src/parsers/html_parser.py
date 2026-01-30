@@ -4,7 +4,7 @@ HTML parser for web page content ingestion.
 
 import logging
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, urldefrag
 
 import requests
 from bs4 import BeautifulSoup
@@ -136,3 +136,25 @@ class HTMLParser(BaseParser):
             metadata["og_title"] = og_title["content"]
 
         return metadata
+
+    @staticmethod
+    def extract_links(html: str, base_url: str) -> list[str]:
+        """Extract and normalize all HTTP(S) links from HTML.
+
+        Args:
+            html: Raw HTML string
+            base_url: Base URL for resolving relative links
+
+        Returns:
+            Deduplicated list of absolute URLs
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        seen = set()
+        links = []
+        for tag in soup.find_all("a", href=True):
+            url = urljoin(base_url, tag["href"])
+            url, _ = urldefrag(url)
+            if url not in seen and url.startswith(("http://", "https://")):
+                seen.add(url)
+                links.append(url)
+        return links
