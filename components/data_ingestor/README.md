@@ -96,7 +96,7 @@ The custom directory contains:
 
 ### Config File
 
-Defaults are copied to `/app/config/` on first run. Behavioral settings go here:
+Defaults are copied to `/app/custom/config/` on first run. Behavioral settings go here:
 
 ```yaml
 # General settings
